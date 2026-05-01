@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # organize.sh — classify loose files in ~/Documents and move them into the
-# canonical structure described in FILE_STRUCTURE.md.
+# canonical structure described in DOCUMENTS_STRUCTURE.md.
 #
 # Default mode is DRY-RUN. Pass --apply to actually move files.
 #
@@ -86,10 +86,23 @@ TOP_BUCKETS=(
   Docs/Presentations Docs/Designs Docs/References Docs/Personal
   Media Media/Screenshots Media/Photos Media/Logos
   Projects Projects/active Projects/client Projects/personal Projects/archive
-  Resources Resources/Fonts Resources/Licenses Resources/Keys Resources/ApiCollections
+  Resources Resources/Fonts Resources/Licenses Resources/Keys
+  Resources/ApiCollections Resources/Configs
   Logs
   Archive
   Trash
+)
+
+# Names that already are canonical top-level buckets — directory sweep skips these.
+CANONICAL_ROOT_DIRS=(
+  Inbox Notes Docs Media Projects Resources Logs Archive Trash
+  Scripts        # personal shell scripts repo, lives at root by exception
+)
+
+# Loose directories at root we deliberately leave alone. Adobe is load-bearing:
+# Adobe apps depend on ~/Documents/Adobe and will recreate it if moved.
+IGNORE_ROOT_DIRS=(
+  Adobe
 )
 
 # Directories we never descend into when classifying loose files.
@@ -219,6 +232,33 @@ classify() {
   echo "Inbox"
 }
 
+# ---------- directory classifier ----------
+# Echoes the destination directory (relative to $ROOT) for a loose DIRECTORY
+# at the root, or one of two sentinels:
+#   "@ignore"  → leave in place silently (load-bearing dirs)
+#   "@warn"    → leave in place, print a warning so the user can extend rules
+classify_dir() {
+  local path="$1"
+  local name; name="$(basename "$path")"
+
+  for ig in "${IGNORE_ROOT_DIRS[@]}"; do
+    [[ "$name" == "$ig" ]] && { echo "@ignore"; return; }
+  done
+
+  # Git repos at root that aren't sanctioned top-level buckets → Projects/personal/.
+  if [[ -d "$path/.git" ]]; then
+    echo "Projects/personal"; return
+  fi
+
+  local lname; lname="$(echo "$name" | tr '[:upper:]' '[:lower:]')"
+  case "$lname" in
+    *_config|*_configs|*-config|*-configs|dotfiles*|*_dotfiles)
+      echo "Resources/Configs"; return ;;
+  esac
+
+  echo "@warn"
+}
+
 # ---------- ensure structure ----------
 echo "ensuring canonical structure under $ROOT (creating any missing dirs)..."
 for d in "${TOP_BUCKETS[@]}"; do mk "$ROOT/$d"; done
@@ -282,7 +322,7 @@ sweep_dir() {
     local name; name="$(basename "$f")"
     # skip our own scripts and the spec
     case "$name" in
-      FILE_STRUCTURE.md|find-duplicates.sh|organize.sh|organize.log) continue ;;
+      DOCUMENTS_STRUCTURE.md|find-duplicates.sh|organize.sh|organize.log) continue ;;
       .DS_Store|.localized|.gitkeep) continue ;;
     esac
     # don't re-classify files already in canonical buckets
@@ -297,6 +337,44 @@ sweep_dir() {
     move_safe "$f" "$ROOT/$dest"
     moved=$((moved+1))
   done < <(find "$abs" -maxdepth 1 -type f)
+}
+
+# Classify loose DIRECTORIES at the root. Canonical buckets are skipped; the
+# rest are dispatched through classify_dir() and either moved, ignored, or
+# warned about (so the user can extend the rules).
+sweep_root_dirs() {
+  declare -i warned=0
+  while IFS= read -r d; do
+    [[ -z "$d" ]] && continue
+    local name; name="$(basename "$d")"
+    case "$name" in
+      .*) continue ;;          # skip dotdirs (.claude, .UTSystemConfig, …)
+    esac
+    local lname; lname="$(echo "$name" | tr '[:upper:]' '[:lower:]')"
+    local is_known=0
+    # Canonical buckets and legacy file-sweep dirs are both "known" — skip them
+    # case-insensitively (macOS filesystem is case-insensitive by default).
+    for c in "${CANONICAL_ROOT_DIRS[@]}" "${SWEEP_DIRS_DEFAULT[@]}"; do
+      [[ -z "$c" ]] && continue
+      local lc; lc="$(echo "$c" | tr '[:upper:]' '[:lower:]')"
+      [[ "$lname" == "$lc" ]] && { is_known=1; break; }
+    done
+    [[ "$is_known" -eq 1 ]] && continue
+
+    local dest; dest="$(classify_dir "$d")"
+    case "$dest" in
+      "@ignore") continue ;;
+      "@warn")
+        echo "  ! unclassified directory: $name/  (left in place — extend classify_dir to handle it)"
+        warned=$((warned+1))
+        ;;
+      *)
+        move_safe "$d" "$ROOT/$dest"
+        moved=$((moved+1))
+        ;;
+    esac
+  done < <(find "$ROOT" -maxdepth 1 -mindepth 1 -type d)
+  [[ "$warned" -gt 0 ]] && echo "  ($warned unclassified directory/ies — see warnings above)"
 }
 
 if [[ "$APPLY" -eq 1 ]]; then
@@ -317,6 +395,8 @@ else
     [[ -n "$d" ]] && echo "→ sweeping: $d/" || echo "→ sweeping: <root>"
     sweep_dir "$d"
   done
+  echo "→ sweeping: <loose root directories>"
+  sweep_root_dirs
 fi
 
 echo

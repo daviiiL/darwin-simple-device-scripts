@@ -91,9 +91,35 @@ ensure_linux_tool() {
      cargo:  cargo install $tool"
 }
 
+# nvm is a shell function (not a binary), so `command -v nvm` won't detect
+# it from this script. Probe the install paths instead.
+nvm_installed() {
+    [[ -s "$HOME/.nvm/nvm.sh" ]] || [[ -s "/opt/homebrew/opt/nvm/nvm.sh" ]]
+}
+
+install_nvm() {
+    have curl || fail "curl is required to install nvm"
+    local tag
+    tag=$(curl -fsSL https://api.github.com/repos/nvm-sh/nvm/releases/latest \
+        | grep '"tag_name"' | head -1 | cut -d'"' -f4)
+    [[ -z "$tag" ]] && fail "could not resolve latest nvm release tag"
+    note "installing nvm $tag (official installer)..."
+    # PROFILE=/dev/null stops the installer from editing ~/.zshrc; our
+    # zshconfig/nvm.zsh already handles sourcing nvm at shell start.
+    curl -fsSL "https://raw.githubusercontent.com/nvm-sh/nvm/$tag/install.sh" \
+        | PROFILE=/dev/null bash
+}
+
+ensure_nvm() {
+    if nvm_installed; then ok "nvm already installed"; return; fi
+    note "nvm not found — installing..."
+    install_nvm
+    ok "nvm installed"
+}
+
 case "$OS" in
-    Darwin) ensure_macos_tool starship; ensure_macos_tool eza ;;
-    Linux)  ensure_linux_tool  starship; ensure_linux_tool  eza ;;
+    Darwin) ensure_macos_tool starship; ensure_macos_tool eza; ensure_nvm ;;
+    Linux)  ensure_linux_tool  starship; ensure_linux_tool  eza; ensure_nvm ;;
     *)      fail "unsupported OS: $OS" ;;
 esac
 
