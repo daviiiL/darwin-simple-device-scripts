@@ -4,7 +4,8 @@
 # Run this once on a fresh machine. It will:
 #   1. Create the directory tree described in FILE_STRUCTURE.md
 #   2. Deploy organize.sh, find-duplicates.sh, and populate.sh into
-#      ~/Documents/Scripts/ via deploy_file()
+#      $ROOT/Scripts/ via deploy_file() (default $ROOT is ~/Documents;
+#      the canonical repo home is ~/Scripts — see setup.sh)
 #   3. Ensure ${XDG_CACHE_HOME:-~/.cache} exists so organize.sh can write its log
 #
 # Usage:

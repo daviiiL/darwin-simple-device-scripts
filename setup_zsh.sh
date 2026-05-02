@@ -202,7 +202,7 @@ hash -d docs=~/Documents
 hash -d proj=~/Documents/Projects
 hash -d cur=~/Documents/Projects/active
 hash -d notes=~/Documents/Notes
-hash -d scripts=~/Documents/Scripts
+hash -d scripts=~/Scripts
 hash -d dl=~/Downloads
 hash -d conf=~/.config
 '

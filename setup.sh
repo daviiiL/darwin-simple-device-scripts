@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
 # setup.sh — main entry point for initial machine setup.
 #
-# Clone this repo to ~/Documents/Scripts (populate.sh treats that as the
-# canonical home) and run ./setup.sh. Idempotent — safe to re-run.
+# Clone this repo to ~/Scripts (the canonical home — dirhash.zsh expands
+# ~scripts to it) and run ./setup.sh. Idempotent — safe to re-run.
 
 set -euo pipefail
 
